@@ -14,7 +14,6 @@ router.post('/logout', protect, logout);
 router.get('/me', protect, getMe);
 
 // --- EXAMPLE OF ROLE-BASED ACCESS CONTROL ---
-// This route can ONLY be accessed by admins and superadmins
 router.get('/admin-dashboard', protect, authorizeRoles('admin', 'superadmin'), (req, res) => {
   res.status(200).json({ success: true, message: 'Welcome to the Admin Area' });
 });

@@ -15,7 +15,7 @@ app.use(morgan("dev")); // HTTP request logging
 
 // --- API ROUTES ---
 app.use("/api/v1/auth", require("./routes/auth.routes"));
-// app.use('/api/v1/users', require('./routes/user.routes'));
+app.use('/api/v1/users', require('./routes/user.routes'));
 app.use("/api/v1/blogs", require("./routes/blog.routes"));
 app.use("/api/v1/products", require("./routes/product.routes"));
 app.use("/api/v1/contacts", require("./routes/contact.routes"));

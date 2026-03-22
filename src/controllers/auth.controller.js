@@ -2,6 +2,20 @@ const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const generateTokens = require('../utils/generateTokens');
 
+// Helper function for defensive error handling
+const handleError = (res, next, error) => {
+  console.error("Auth API Error:", error);
+  if (typeof next === 'function') {
+    next(error);
+  } else {
+    // Fallback if 'next' is ever lost in the Express pipeline
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Internal Server Error' 
+    });
+  }
+};
+
 // @desc    Register user
 // @route   POST /api/v1/auth/register
 // @access  Public
@@ -9,7 +23,7 @@ exports.register = async (req, res, next) => {
   try {
     const { username, email, password, name, profession, device_id, fcm_token, profile_pic } = req.body;
 
-    // 1. Explicitly check for required fields to prevent Mongoose validation crashes
+    // 1. Explicitly check for required fields
     if (!username || !email || !password) {
       return res.status(400).json({ success: false, message: 'Username, email, and password are required' });
     }
@@ -26,10 +40,10 @@ exports.register = async (req, res, next) => {
       email, 
       password, 
       name: name || username, 
-      profession, 
-      device_id, 
-      fcm_token, 
-      profile_pic
+      profession: profession || 'Unspecified', 
+      device_id: device_id || '', 
+      fcm_token: fcm_token || '', 
+      profile_pic: profile_pic || ''
     });
 
     // 4. Generate Tokens
@@ -51,7 +65,7 @@ exports.register = async (req, res, next) => {
       user: userData 
     });
   } catch (error) {
-    next(error);
+    handleError(res, next, error);
   }
 };
 
@@ -66,14 +80,14 @@ exports.login = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Please provide email and password' });
     }
 
-    // 1. Fetch user and explicitly select the hidden password field for comparison
+    // 1. Fetch user and explicitly select the hidden password field
     const user = await User.findOne({ email }).select('+password');
     
     if (!user || !(await user.matchPassword(password))) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
-    // 2. Update Device/FCM info if provided on login
+    // 2. Update Device/FCM info
     if (device_id) user.device_id = device_id;
     if (fcm_token) user.fcm_token = fcm_token;
 
@@ -94,7 +108,7 @@ exports.login = async (req, res, next) => {
       user: userData 
     });
   } catch (error) {
-    next(error);
+    handleError(res, next, error);
   }
 };
 
@@ -112,13 +126,13 @@ exports.refreshToken = async (req, res, next) => {
     // 1. Verify token cryptographic signature
     const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
 
-    // 2. Check if user exists and token matches the one in DB (protects against revoked tokens)
+    // 2. Check if user exists and token matches
     const user = await User.findById(decoded.id).select('+refresh_token');
     if (!user || user.refresh_token !== refreshToken) {
       return res.status(403).json({ success: false, message: 'Invalid or expired refresh token' });
     }
 
-    // 3. Issue new tokens (Token Rotation)
+    // 3. Issue new tokens
     const tokens = generateTokens(user);
     user.refresh_token = tokens.refreshToken;
     await user.save();
@@ -129,21 +143,19 @@ exports.refreshToken = async (req, res, next) => {
       refreshToken: tokens.refreshToken
     });
   } catch (error) {
-    // Catch block handles jwt.verify() failing (e.g., token expired or tampered)
     return res.status(403).json({ success: false, message: 'Invalid or expired refresh token' });
   }
 };
 
-// @desc    Logout user (Invalidates Refresh Token)
+// @desc    Logout user
 // @route   POST /api/v1/auth/logout
 // @access  Private
 exports.logout = async (req, res, next) => {
   try {
-    // By emptying the refresh token, the user will be forced to log in again once the access token dies
     await User.findByIdAndUpdate(req.user.id, { refresh_token: '' });
     res.status(200).json({ success: true, message: 'Logged out successfully' });
   } catch (error) {
-    next(error);
+    handleError(res, next, error);
   }
 };
 
@@ -152,8 +164,6 @@ exports.logout = async (req, res, next) => {
 // @access  Private
 exports.getMe = async (req, res, next) => {
   try {
-    // Because this is protected by middleware, req.user already exists.
-    // We just fetch the fresh data from the DB to return it.
     const user = await User.findById(req.user.id);
     
     if (!user) {
@@ -162,6 +172,6 @@ exports.getMe = async (req, res, next) => {
 
     res.status(200).json({ success: true, user });
   } catch (error) {
-    next(error);
+    handleError(res, next, error);
   }
 };
