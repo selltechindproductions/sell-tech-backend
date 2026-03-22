@@ -2,24 +2,10 @@ const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const generateTokens = require('../utils/generateTokens');
 
-// Helper function for defensive error handling
-const handleError = (res, next, error) => {
-  console.error("Auth API Error:", error);
-  if (typeof next === 'function') {
-    next(error);
-  } else {
-    // Fallback if 'next' is ever lost in the Express pipeline
-    res.status(500).json({ 
-      success: false, 
-      message: error.message || 'Internal Server Error' 
-    });
-  }
-};
-
 // @desc    Register user
 // @route   POST /api/v1/auth/register
 // @access  Public
-exports.register = async (req, res, next) => {
+exports.register = async (req, res) => {
   try {
     const { username, email, password, name, profession, device_id, fcm_token, profile_pic } = req.body;
 
@@ -58,21 +44,26 @@ exports.register = async (req, res, next) => {
     delete userData.password;
     delete userData.refresh_token;
 
-    res.status(201).json({ 
+    return res.status(201).json({ 
       success: true, 
       accessToken, 
       refreshToken, 
       user: userData 
     });
   } catch (error) {
-    handleError(res, next, error);
+    console.error("Register Error:", error);
+    // Directly send the error to the client instead of using 'next'
+    return res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Internal Server Error' 
+    });
   }
 };
 
 // @desc    Login user
 // @route   POST /api/v1/auth/login
 // @access  Public
-exports.login = async (req, res, next) => {
+exports.login = async (req, res) => {
   try {
     const { email, password, device_id, fcm_token } = req.body;
 
@@ -101,21 +92,25 @@ exports.login = async (req, res, next) => {
     delete userData.password;
     delete userData.refresh_token;
 
-    res.status(200).json({ 
+    return res.status(200).json({ 
       success: true, 
       accessToken, 
       refreshToken, 
       user: userData 
     });
   } catch (error) {
-    handleError(res, next, error);
+    console.error("Login Error:", error);
+    return res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Internal Server Error' 
+    });
   }
 };
 
 // @desc    Get new Access Token using Refresh Token
 // @route   POST /api/v1/auth/refresh
 // @access  Public
-exports.refreshToken = async (req, res, next) => {
+exports.refreshToken = async (req, res) => {
   try {
     const { refreshToken } = req.body;
 
@@ -137,12 +132,13 @@ exports.refreshToken = async (req, res, next) => {
     user.refresh_token = tokens.refreshToken;
     await user.save();
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken
     });
   } catch (error) {
+    console.error("Refresh Token Error:", error);
     return res.status(403).json({ success: false, message: 'Invalid or expired refresh token' });
   }
 };
@@ -150,19 +146,23 @@ exports.refreshToken = async (req, res, next) => {
 // @desc    Logout user
 // @route   POST /api/v1/auth/logout
 // @access  Private
-exports.logout = async (req, res, next) => {
+exports.logout = async (req, res) => {
   try {
     await User.findByIdAndUpdate(req.user.id, { refresh_token: '' });
-    res.status(200).json({ success: true, message: 'Logged out successfully' });
+    return res.status(200).json({ success: true, message: 'Logged out successfully' });
   } catch (error) {
-    handleError(res, next, error);
+    console.error("Logout Error:", error);
+    return res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Internal Server Error' 
+    });
   }
 };
 
 // @desc    Get current logged in user profile
 // @route   GET /api/v1/auth/me
 // @access  Private
-exports.getMe = async (req, res, next) => {
+exports.getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
     
@@ -170,8 +170,12 @@ exports.getMe = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    res.status(200).json({ success: true, user });
+    return res.status(200).json({ success: true, user });
   } catch (error) {
-    handleError(res, next, error);
+    console.error("GetMe Error:", error);
+    return res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Internal Server Error' 
+    });
   }
 };
