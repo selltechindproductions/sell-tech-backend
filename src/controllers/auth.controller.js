@@ -1,148 +1,170 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const generateTokens = require('../utils/generateTokens');
+const asyncHandler = require('../utils/asyncHandler');
 
-// =============== REGISTER USER ===============
-const register = async (req, res, next) => {
-  try {
-    const { username, email, password, name, profession, device_id, fcm_token, profile_pic } = req.body;
+// ================= REGISTER =================
+const register = asyncHandler(async (req, res) => {
+  const {
+    username,
+    email,
+    password,
+    name,
+    profession,
+    device_id,
+    fcm_token,
+    profile_pic,
+  } = req.body;
 
-    if (!username || !email || !password) {
-      return res.status(400).json({ success: false, message: 'Username, email, and password are required' });
-    }
-
-    const existingUser = await User.findOne({ $or: [{ email }, { username }] });
-    if (existingUser) {
-      return res.status(400).json({ success: false, message: 'Email or Username already exists' });
-    }
-
-    const user = await User.create({
-      username, 
-      email, 
-      password, 
-      name: name || username, 
-      profession: profession || 'Unspecified', 
-      device_id: device_id || '', 
-      fcm_token: fcm_token || '', 
-      profile_pic: profile_pic || ''
+  if (!username || !email || !password) {
+    return res.status(400).json({
+      success: false,
+      message: 'Username, email, and password are required',
     });
+  }
 
-    const { accessToken, refreshToken } = generateTokens(user);
+  const existingUser = await User.findOne({
+    $or: [{ email }, { username }],
+  });
 
-    user.refresh_token = refreshToken;
-    await user.save();
-
-    const userData = user.toObject();
-    delete userData.password;
-    delete userData.refresh_token;
-
-    return res.status(201).json({ 
-      success: true, 
-      accessToken, 
-      refreshToken, 
-      user: userData 
+  if (existingUser) {
+    return res.status(400).json({
+      success: false,
+      message: 'Email or Username already exists',
     });
-  } catch (err) {
-    next(err);
   }
-};
 
-// =============== LOGIN USER ===============
-const login = async (req, res, next) => {
-  try {
-    const { email, password, device_id, fcm_token } = req.body;
+  const user = await User.create({
+    username,
+    email,
+    password,
+    name: name || username,
+    profession: profession || 'Unspecified',
+    device_id: device_id || '',
+    fcm_token: fcm_token || '',
+    profile_pic: profile_pic || '',
+  });
 
-    if (!email || !password) {
-      return res.status(400).json({ success: false, message: 'Please provide email and password' });
-    }
+  const { accessToken, refreshToken } = generateTokens(user);
 
-    const user = await User.findOne({ email }).select('+password');
-    
-    if (!user || !(await user.matchPassword(password))) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
-    }
+  user.refresh_token = refreshToken;
+  await user.save();
 
-    if (device_id) user.device_id = device_id;
-    if (fcm_token) user.fcm_token = fcm_token;
+  const userData = user.toObject();
+  delete userData.password;
+  delete userData.refresh_token;
 
-    const { accessToken, refreshToken } = generateTokens(user);
-    user.refresh_token = refreshToken;
-    await user.save();
+  res.status(201).json({
+    success: true,
+    accessToken,
+    refreshToken,
+    user: userData,
+  });
+});
 
-    const userData = user.toObject();
-    delete userData.password;
-    delete userData.refresh_token;
+// ================= LOGIN =================
+const login = asyncHandler(async (req, res) => {
+  const { email, password, device_id, fcm_token } = req.body;
 
-    return res.status(200).json({ 
-      success: true, 
-      accessToken, 
-      refreshToken, 
-      user: userData 
+  if (!email || !password) {
+    return res.status(400).json({
+      success: false,
+      message: 'Please provide email and password',
     });
-  } catch (err) {
-    next(err);
   }
-};
 
-// =============== REFRESH TOKEN ===============
-const refreshToken = async (req, res, next) => {
-  try {
-    // Alias to avoid variable shadowing
-    const { refreshToken: reqToken } = req.body;
+  const user = await User.findOne({ email }).select('+password');
 
-    if (!reqToken) {
-      return res.status(401).json({ success: false, message: 'Refresh token is required' });
-    }
-
-    const decoded = jwt.verify(reqToken, process.env.JWT_REFRESH_SECRET);
-
-    const user = await User.findById(decoded.id).select('+refresh_token');
-    if (!user || user.refresh_token !== reqToken) {
-      return res.status(403).json({ success: false, message: 'Invalid or expired refresh token' });
-    }
-
-    const tokens = generateTokens(user);
-    user.refresh_token = tokens.refreshToken;
-    await user.save();
-
-    return res.status(200).json({
-      success: true,
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken
+  if (!user || !(await user.matchPassword(password))) {
+    return res.status(401).json({
+      success: false,
+      message: 'Invalid credentials',
     });
-  } catch (err) {
-    // We specifically return a 403 here instead of next(err) so the Flutter 
-    // interceptor knows exactly how to handle expired sessions.
-    return res.status(403).json({ success: false, message: 'Invalid or expired refresh token' });
   }
-};
 
-// =============== LOGOUT USER ===============
-const logout = async (req, res, next) => {
-  try {
-    await User.findByIdAndUpdate(req.user.id, { refresh_token: '' });
-    return res.status(200).json({ success: true, message: 'Logged out successfully' });
-  } catch (err) {
-    next(err);
+  if (device_id) user.device_id = device_id;
+  if (fcm_token) user.fcm_token = fcm_token;
+
+  const { accessToken, refreshToken } = generateTokens(user);
+
+  user.refresh_token = refreshToken;
+  await user.save();
+
+  const userData = user.toObject();
+  delete userData.password;
+  delete userData.refresh_token;
+
+  res.status(200).json({
+    success: true,
+    accessToken,
+    refreshToken,
+    user: userData,
+  });
+});
+
+// ================= REFRESH =================
+const refreshToken = asyncHandler(async (req, res) => {
+  const { refreshToken: reqToken } = req.body;
+
+  if (!reqToken) {
+    return res.status(401).json({
+      success: false,
+      message: 'Refresh token is required',
+    });
   }
-};
 
-// =============== GET LOGGED-IN USER ===============
-const getMe = async (req, res, next) => {
-  try {
-    const user = await User.findById(req.user.id);
-    
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
+  const decoded = jwt.verify(reqToken, process.env.JWT_REFRESH_SECRET);
 
-    return res.status(200).json({ success: true, user });
-  } catch (err) {
-    next(err);
+  const user = await User.findById(decoded.id).select('+refresh_token');
+
+  if (!user || user.refresh_token !== reqToken) {
+    return res.status(403).json({
+      success: false,
+      message: 'Invalid refresh token',
+    });
   }
-};
 
-// =============== EXPORT MODULE ===============
+  const tokens = generateTokens(user);
+
+  user.refresh_token = tokens.refreshToken;
+  await user.save();
+
+  res.status(200).json({
+    success: true,
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
+  });
+});
+
+// ================= LOGOUT =================
+const logout = asyncHandler(async (req, res) => {
+  await User.findByIdAndUpdate(req.user.id, {
+    refresh_token: '',
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Logged out successfully',
+  });
+});
+
+// ================= GET ME =================
+const getMe = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user.id);
+
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      message: 'User not found',
+    });
+  }
+
+  res.status(200).json({
+    success: true,
+    user,
+  });
+});
+
 module.exports = {
   register,
   login,

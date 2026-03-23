@@ -3,7 +3,6 @@ const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const { errorHandler, notFound } = require("./middlewares/error.middleware");
-
 const app = express();
 
 // --- GLOBAL MIDDLEWARES ---
