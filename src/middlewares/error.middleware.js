@@ -5,21 +5,15 @@ const notFound = (req, res, next) => {
 };
 
 const errorHandler = (err, req, res, next) => {
-  // If status code is 200 but we hit an error, force it to 500 (Server Error)
-  let statusCode = res.statusCode === 200 ? 500 : res.statusCode;
-  let message = err.message;
+  console.error("🔥 ERROR:", err);
 
-  // Handle Mongoose Bad ObjectId
-  if (err.name === 'CastError' && err.kind === 'ObjectId') {
-    statusCode = 404;
-    message = 'Resource not found';
-  }
-
-  res.status(statusCode).json({
+  res.status(err.statusCode || 500).json({
     success: false,
-    message: message,
-    stack: process.env.NODE_ENV === 'production' ? '🥞' : err.stack,
+    message: err.message || "Internal Server Error",
+    stack: process.env.NODE_ENV === "production" ? null : err.stack,
   });
 };
+
+module.exports = errorHandler;
 
 module.exports = { notFound, errorHandler };
